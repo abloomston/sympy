@@ -472,11 +472,22 @@ class Basic(with_metaclass(ManagedProperties)):
                 [t if isinstance(t, type) else type(t) for t in types])
         else:
             types = (Atom,)
+        return set(self._atoms(types))
+
+    @cacheit
+    def _atoms(self, types):
+        """
+        Helper for atoms.
+        """
         result = set()
-        for expr in preorder_traversal(self):
-            if isinstance(expr, types):
-                result.add(expr)
-        return result
+        if isinstance(self, types):
+            result.add(self)
+        for arg in self.args:
+            if isinstance(arg, Basic):
+                result.update(arg._atoms(types))
+            elif isinstance(arg, types):
+                result.add(arg)
+        return frozenset(result)
 
     @property
     def free_symbols(self):
