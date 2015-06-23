@@ -1413,7 +1413,21 @@ class Basic(with_metaclass(ManagedProperties)):
     def count(self, query):
         """Count the number of matching subexpressions. """
         query = _make_find_query(query)
-        return sum(bool(query(sub)) for sub in preorder_traversal(self))
+        return self._count_query(query)
+
+    @cacheit
+    def _count_query(self, query):
+        """
+        Helper method for count() for caching purposes.
+        """
+        count = 0
+        count += bool(query(self))
+        count += sum(
+            arg._count_query(query) if isinstance(arg, Basic)
+            else bool(query(arg))
+            for arg in self.args
+        )
+        return count
 
     def matches(self, expr, repl_dict={}, old=False):
         """
