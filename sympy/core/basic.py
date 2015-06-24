@@ -1111,7 +1111,6 @@ class Basic(with_metaclass(ManagedProperties)):
                 return self.func(*args), True
         return self, False
 
-    @cacheit
     def has(self, *patterns):
         """
         Test whether any subexpression matches any of the patterns.
@@ -1139,25 +1138,54 @@ class Basic(with_metaclass(ManagedProperties)):
         return any(self._has(pattern) for pattern in patterns)
 
     def _has(self, pattern):
-        """Helper for .has()"""
-        from sympy.core.function import UndefinedFunction, Function
+        """
+        Helper for .has(). Maps pattern to a matcher function
+        and calls ._has_match().
+        """
+        from sympy.core.function import UndefinedFunction
         if isinstance(pattern, UndefinedFunction):
-            return any(f.func == pattern or f == pattern
-            for f in self.atoms(Function, UndefinedFunction))
+            return self._has_match(pattern, Basic._has_match_func)
 
         pattern = sympify(pattern)
         if isinstance(pattern, BasicMeta):
-            return any(isinstance(arg, pattern)
-            for arg in preorder_traversal(self))
+            return self._has_match(pattern, Basic._has_match_basicmeta)
 
         try:
             match = pattern._has_matcher()
-            return any(match(arg) for arg in preorder_traversal(self))
+            return self._has_match(pattern, Basic._has_match_has_matcher)
         except AttributeError:
-            return any(arg == pattern for arg in preorder_traversal(self))
+            return self._has_match(pattern, Basic._has_match_eqeq)
+
+    @cacheit
+    def _has_match(self, pattern, _has_match_f):
+        if _has_match_f(self, pattern):
+            return True
+        return any(
+            arg._has_match(pattern, _has_match_f) if isinstance(arg, Basic)
+            else _has_match_f(arg, pattern)
+            for arg in self.args
+        )
+
+    @staticmethod
+    def _has_match_func(f, pattern):
+        from sympy.core.function import UndefinedFunction, Function
+        oktypes = (UndefinedFunction, Function)
+        return isinstance(f, oktypes) and (f.func == pattern or f == pattern)
+
+    @staticmethod
+    def _has_match_basicmeta(arg, pattern):
+        return isinstance(arg, pattern)
+
+    @staticmethod
+    def _has_match_has_matcher(arg, pattern):
+        return pattern._has_matcher()(arg)
+
+    @staticmethod
+    def _has_match_eqeq(arg, pattern):
+        return arg == pattern
 
     def _has_matcher(self):
-        """Helper for .has()"""
+        """Helper for ._has() that may be overriden by child classes."""
         return self.__eq__
 
     def replace(self, query, value, map=False, simultaneous=True, exact=False):
